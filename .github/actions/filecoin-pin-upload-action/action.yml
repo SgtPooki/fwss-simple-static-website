@@ -216,11 +216,17 @@ runs:
         IPFS_ROOT_CID: ${{ steps.run.outputs.root_cid || steps.from-cache.outputs.root_cid || steps.from-artifact.outputs.root_cid }}
         DATA_SET_ID: ${{ steps.run.outputs.data_set_id || steps.from-cache.outputs.data_set_id || steps.from-artifact.outputs.data_set_id }}
         PIECE_CID: ${{ steps.run.outputs.piece_cid || steps.from-cache.outputs.piece_cid || steps.from-artifact.outputs.piece_cid }}
+        UPLOAD_STATUS: ${{ steps.run.outputs.upload_status || steps.from-cache.outputs.upload_status || steps.from-artifact.outputs.upload_status }}
       with:
         github-token: ${{ inputs.github_token }}
         script: |
-          const { IPFS_ROOT_CID, DATA_SET_ID, PIECE_CID } = process.env
+          const { IPFS_ROOT_CID, DATA_SET_ID, PIECE_CID, UPLOAD_STATUS } = process.env
           const preview = 'https://ipfs.io/ipfs/' + IPFS_ROOT_CID
+          let statusLine = '- Status: '
+          if (UPLOAD_STATUS === 'uploaded') statusLine += 'Uploaded new content'
+          else if (UPLOAD_STATUS === 'reused-cache') statusLine += 'Reused cached content'
+          else if (UPLOAD_STATUS === 'reused-artifact') statusLine += 'Reused artifact content'
+          else statusLine += 'Unknown (see job logs)'
           const body = [
             '<!-- filecoin-pin-upload-action -->',
             'Filecoin Pin Upload ✅',
@@ -229,7 +235,9 @@ runs:
             '- Data Set ID: `' + DATA_SET_ID + '`',
             '- Piece CID: `' + PIECE_CID + '`',
             '',
-            '- Preview (TBD infra): use a trustless gateway, e.g.:',
+            statusLine,
+            '',
+            '- Preview (temporary centralized gateway):',
             '  - ' + preview,
           ].join('\n')
 
