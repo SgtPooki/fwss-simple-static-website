@@ -220,16 +220,17 @@ runs:
         github-token: ${{ inputs.github_token }}
         script: |
           const { IPFS_ROOT_CID, DATA_SET_ID, PIECE_CID } = process.env
+          const preview = 'https://ipfs.io/ipfs/' + IPFS_ROOT_CID
           const body = [
             '<!-- filecoin-pin-upload-action -->',
             'Filecoin Pin Upload ✅',
             '',
-            `- IPFS Root CID: \\`${IPFS_ROOT_CID}\\``,
-            `- Data Set ID: \\`${DATA_SET_ID}\\``,
-            `- Piece CID: \\`${PIECE_CID}\\``,
+            '- IPFS Root CID: `' + IPFS_ROOT_CID + '`',
+            '- Data Set ID: `' + DATA_SET_ID + '`',
+            '- Piece CID: `' + PIECE_CID + '`',
             '',
             '- Preview (TBD infra): use a trustless gateway, e.g.:',
-            `  - https://ipfs.io/ipfs/${IPFS_ROOT_CID}`,
+            '  - ' + preview,
           ].join('\n')
 
           const { owner, repo } = context.repo
