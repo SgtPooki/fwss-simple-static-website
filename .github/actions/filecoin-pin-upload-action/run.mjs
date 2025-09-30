@@ -126,16 +126,27 @@ async function main() {
   const providerName = providerInfo.name ?? (providerInfo.serviceProvider || '')
   const previewURL = getDownloadURL(providerInfo, pieceCid) || `https://ipfs.io/ipfs/${rootCid.toString()}`
 
-  // Write JSON metadata next to CAR inside runner temp dir
-  const outDir = process.env.RUNNER_TEMP || __dirname
-  const metadataPath = join(outDir, `filecoin-pin-upload-${Date.now()}.json`)
+  // Prepare a clean artifact directory inside the workspace to avoid nested runner paths
+  const artifactDir = join(workspace, 'filecoin-pin-artifacts')
+  try {
+    await fs.mkdir(artifactDir, { recursive: true })
+  } catch (e) {
+    console.error('Failed to create artifact directory:', e?.message || e)
+  }
+
+  // Copy CAR to artifact directory with a simple name
+  const artifactCarPath = join(artifactDir, 'upload.car')
+  await fs.copyFile(carPath, artifactCarPath)
+
+  // Write metadata JSON into artifact directory
+  const metadataPath = join(artifactDir, 'upload.json')
   await fs.writeFile(
     metadataPath,
     JSON.stringify(
       {
         network,
         contentPath: targetPath,
-        carPath,
+        carPath: artifactCarPath,
         rootCid: rootCid.toString(),
         pieceCid,
         pieceId,
@@ -154,7 +165,7 @@ async function main() {
   await writeOutput('piece_cid', pieceCid)
   await writeOutput('provider_id', providerId)
   await writeOutput('provider_name', providerName)
-  await writeOutput('car_path', carPath)
+  await writeOutput('car_path', artifactCarPath)
   await writeOutput('metadata_path', metadataPath)
 
   console.log('\n━━━ Filecoin Pin Upload Complete ━━━')
@@ -165,12 +176,40 @@ async function main() {
   console.log(`Provider: ${providerName} (ID ${providerId})`)
   console.log(`Preview: ${previewURL}`)
 
+  // Append a concise summary to the GitHub Action run
+  try {
+    const summaryFile = process.env.GITHUB_STEP_SUMMARY
+    if (summaryFile) {
+      const md = [
+        '## Filecoin Pin Upload',
+        '',
+        `- Network: ${network}`,
+        `- IPFS Root CID: ${rootCid.toString()}`,
+        `- Data Set ID: ${dataSetId}`,
+        `- Piece CID: ${pieceCid}`,
+        `- Provider: ${providerName} (ID ${providerId})`,
+        `- Preview: ${previewURL}`,
+        '',
+        `Artifacts:`,
+        `- CAR: ${artifactCarPath}`,
+        `- Metadata: ${metadataPath}`,
+        ''
+      ].join('\n')
+      await fs.appendFile(summaryFile, `\n${md}\n`)
+    }
+  } catch (e) {
+    console.error('Failed to write summary:', e?.message || e)
+  }
+
   await cleanupSynapseService()
 }
 
 main().catch(async (err) => {
   console.error('Upload failed:', err?.message || err)
-  try { await cleanupSynapseService() } catch {}
+  try {
+    await cleanupSynapseService()
+  } catch (e) {
+    console.error('Cleanup failed:', e?.message || e)
+  }
   process.exit(1)
 })
-

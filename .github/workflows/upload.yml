@@ -32,6 +32,5 @@ jobs:
         with:
           privateKey: ${{ secrets.FILECOIN_WALLET_KEY }}
           path: dist
-          minDays: 10
-          minBalance: "5"   # USDFC
+          minDays: 30
           maxTopUp: "5"     # USDFC
