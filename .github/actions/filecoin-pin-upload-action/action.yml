@@ -34,6 +34,10 @@ inputs:
     description: If true, request CDN in the storage context (depends on provider capabilities).
     required: false
     default: "false"
+  providerAddress:
+    description: Optional override for storage provider address (on Calibration/Mainnet). Defaults to a known good provider on Calibration.
+    required: false
+    default: "0xa3971A7234a3379A1813d9867B531e7EeB20ae07"
   cacheRetentionDays:
     description: Retention (days) for GitHub Actions cache entries created for uploaded content.
     required: false
@@ -89,6 +93,7 @@ runs:
         INPUT_MAXTOPUP: ${{ inputs.maxTopUp }}
         INPUT_WITHCDN: ${{ inputs.withCDN }}
         INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_PROVIDERADDRESS: ${{ inputs.providerAddress }}
         ACTION_PHASE: compute
       run: |
         node run.mjs
@@ -114,6 +119,7 @@ runs:
         INPUT_MAXTOPUP: ${{ inputs.maxTopUp }}
         INPUT_WITHCDN: ${{ inputs.withCDN }}
         INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_PROVIDERADDRESS: ${{ inputs.providerAddress }}
         PREPARED_CAR_PATH: ${{ steps.compute.outputs.car_path }}
         PREPARED_ROOT_CID: ${{ steps.compute.outputs.root_cid }}
         ACTION_PHASE: from-cache
@@ -134,6 +140,7 @@ runs:
         INPUT_MAXTOPUP: ${{ inputs.maxTopUp }}
         INPUT_WITHCDN: ${{ inputs.withCDN }}
         INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_PROVIDERADDRESS: ${{ inputs.providerAddress }}
         ACTION_PHASE: upload
         PREPARED_CAR_PATH: ${{ steps.compute.outputs.car_path }}
         PREPARED_ROOT_CID: ${{ steps.compute.outputs.root_cid }}

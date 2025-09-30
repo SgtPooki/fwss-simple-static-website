@@ -40,6 +40,7 @@ async function main() {
   const maxTopUpRaw = getInput('maxTopUp', '')
   const withCDN = parseBoolean(getInput('withCDN', 'false'))
   const token = getInput('token', 'USDFC')
+  const providerAddress = getInput('providerAddress', '0xa3971A7234a3379A1813d9867B531e7EeB20ae07')
 
   if (!privateKey) {
     console.error('privateKey is required')
@@ -62,6 +63,11 @@ async function main() {
   if (token && token.toUpperCase() !== 'USDFC') {
     console.error('Only USDFC is supported at this time for payments. Token override will be enabled later.')
     process.exit(1)
+  }
+
+  // If a provider override is supplied, set env so filecoin-pin picks it up in createStorageContext
+  if (providerAddress) {
+    process.env.PROVIDER_ADDRESS = providerAddress
   }
 
   // PHASE: compute -> pack only, set outputs and exit
@@ -223,7 +229,7 @@ async function main() {
 
   const providerId = providerInfo.id ?? ''
   const providerName = providerInfo.name ?? (providerInfo.serviceProvider || '')
-  const previewURL = getDownloadURL(providerInfo, pieceCid) || `https://ipfs.io/ipfs/${rootCid.toString()}`
+  const previewURL = getDownloadURL(providerInfo, pieceCid) || `https://ipfs.io/ipfs/${rootCidStr}`
 
   // Prepare a clean artifact directory inside the workspace to avoid nested runner paths
   const artifactDir = join(workspace, 'filecoin-pin-artifacts')
@@ -276,7 +282,7 @@ async function main() {
 
   console.log('\n━━━ Filecoin Pin Upload Complete ━━━')
   console.log(`Network: ${network}`)
-  console.log(`IPFS Root CID: ${pc.bold(rootCid.toString())}`)
+  console.log(`IPFS Root CID: ${pc.bold(rootCidStr)}`)
   console.log(`Data Set ID: ${dataSetId}`)
   console.log(`Piece CID: ${pieceCid}`)
   console.log(`Provider: ${providerName} (ID ${providerId})`)
@@ -290,7 +296,7 @@ async function main() {
         '## Filecoin Pin Upload',
         '',
         `- Network: ${network}`,
-        `- IPFS Root CID: ${rootCid.toString()}`,
+        `- IPFS Root CID: ${rootCidStr}`,
         `- Data Set ID: ${dataSetId}`,
         `- Piece CID: ${pieceCid}`,
         `- Provider: ${providerName} (ID ${providerId})`,

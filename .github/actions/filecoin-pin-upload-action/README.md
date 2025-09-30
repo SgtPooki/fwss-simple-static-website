@@ -12,6 +12,7 @@ with:
   minDays: 10
   minBalance: "5"   # USDFC
   maxTopUp: "50"     # USDFC
+  providerAddress: "0xa3971A7234a3379A1813d9867B531e7EeB20ae07"
   cacheRetentionDays: "90"
 ```
 
@@ -27,6 +28,7 @@ Inputs
 - `maxTopUp` (optional): Maximum additional deposit (USDFC).
 - `token` (default: `USDFC`): Supported token.
 - `withCDN` (default: `false`): Request CDN if available.
+- `providerAddress` (default shown above): Override storage provider address (Calibration/Mainnet). Leave empty to allow auto-selection.
 - `cacheRetentionDays` (default: `90`): Retention for the GitHub Actions cache entries keyed by IPFS Root CID.
 
 Caching details
