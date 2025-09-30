@@ -34,6 +34,10 @@ inputs:
     description: If true, request CDN in the storage context (depends on provider capabilities).
     required: false
     default: "false"
+  cacheRetentionDays:
+    description: Retention (days) for GitHub Actions cache entries created for uploaded content.
+    required: false
+    default: "90"
 
 outputs:
   root_cid:
@@ -72,7 +76,52 @@ runs:
       run: |
         npm install --no-audit --no-fund
 
+    - name: Compute root + CAR
+      id: compute
+      shell: bash
+      working-directory: .github/actions/filecoin-pin-upload-action
+      env:
+        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+        INPUT_PRIVATEKEY: ${{ inputs.privateKey }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_MINDAYS: ${{ inputs.minDays }}
+        INPUT_MINBALANCE: ${{ inputs.minBalance }}
+        INPUT_MAXTOPUP: ${{ inputs.maxTopUp }}
+        INPUT_WITHCDN: ${{ inputs.withCDN }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        ACTION_PHASE: compute
+      run: |
+        node run.mjs
+
+    - name: Restore upload cache
+      id: cache-restore
+      uses: actions/cache/restore@v4
+      with:
+        key: filecoin-pin-v1-${{ steps.compute.outputs.root_cid }}
+        path: .filecoin-pin-cache/${{ steps.compute.outputs.root_cid }}
+
+    - name: Use cached metadata
+      if: ${{ steps.cache-restore.outputs.cache-hit == 'true' }}
+      id: from-cache
+      shell: bash
+      working-directory: .github/actions/filecoin-pin-upload-action
+      env:
+        CACHE_DIR: ${{ github.workspace }}/.filecoin-pin-cache/${{ steps.compute.outputs.root_cid }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+        INPUT_PRIVATEKEY: ${{ inputs.privateKey }}
+        INPUT_MINDAYS: ${{ inputs.minDays }}
+        INPUT_MINBALANCE: ${{ inputs.minBalance }}
+        INPUT_MAXTOPUP: ${{ inputs.maxTopUp }}
+        INPUT_WITHCDN: ${{ inputs.withCDN }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        PREPARED_CAR_PATH: ${{ steps.compute.outputs.car_path }}
+        PREPARED_ROOT_CID: ${{ steps.compute.outputs.root_cid }}
+        ACTION_PHASE: from-cache
+      run: |
+        node run.mjs
+
     - name: Upload via filecoin-pin
+      if: ${{ steps.cache-restore.outputs.cache-hit != 'true' }}
       id: run
       shell: bash
       working-directory: .github/actions/filecoin-pin-upload-action
@@ -85,25 +134,36 @@ runs:
         INPUT_MAXTOPUP: ${{ inputs.maxTopUp }}
         INPUT_WITHCDN: ${{ inputs.withCDN }}
         INPUT_TOKEN: ${{ inputs.token }}
+        ACTION_PHASE: upload
+        PREPARED_CAR_PATH: ${{ steps.compute.outputs.car_path }}
+        PREPARED_ROOT_CID: ${{ steps.compute.outputs.root_cid }}
       run: |
         node run.mjs
 
+    - name: Save upload cache
+      if: ${{ steps.cache-restore.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v4
+      with:
+        key: filecoin-pin-v1-${{ steps.compute.outputs.root_cid }}
+        path: .filecoin-pin-cache/${{ steps.compute.outputs.root_cid }}
+        retention-days: ${{ inputs.cacheRetentionDays }}
+
     - name: Upload CAR + metadata artifacts
-      if: ${{ steps.run.outputs.car_path != '' }}
+      if: ${{ (steps.run.outputs.car_path || steps.from-cache.outputs.car_path) != '' }}
       uses: actions/upload-artifact@v4
       with:
         name: filecoin-pin-upload
         path: |
-          ${{ steps.run.outputs.car_path }}
-          ${{ steps.run.outputs.metadata_path }}
+          ${{ steps.run.outputs.car_path || steps.from-cache.outputs.car_path }}
+          ${{ steps.run.outputs.metadata_path || steps.from-cache.outputs.metadata_path }}
 
     - name: Comment on PR with IPFS Root CID
       if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
       uses: actions/github-script@v7
       env:
-        IPFS_ROOT_CID: ${{ steps.run.outputs.root_cid }}
-        DATA_SET_ID: ${{ steps.run.outputs.data_set_id }}
-        PIECE_CID: ${{ steps.run.outputs.piece_cid }}
+        IPFS_ROOT_CID: ${{ steps.run.outputs.root_cid || steps.from-cache.outputs.root_cid }}
+        DATA_SET_ID: ${{ steps.run.outputs.data_set_id || steps.from-cache.outputs.data_set_id }}
+        PIECE_CID: ${{ steps.run.outputs.piece_cid || steps.from-cache.outputs.piece_cid }}
       with:
         github-token: ${{ inputs.github_token }}
         script: |
@@ -129,4 +189,3 @@ runs:
           } else {
             await github.rest.issues.createComment({ owner, repo, issue_number, body })
           }
-

@@ -32,6 +32,7 @@ async function writeOutput(name, value) {
 }
 
 async function main() {
+  const phase = process.env.ACTION_PHASE || 'single'
   const privateKey = getInput('privateKey')
   const contentPath = getInput('path', 'dist')
   const minDaysRaw = getInput('minDays', '10')
@@ -62,6 +63,99 @@ async function main() {
     console.error('Only USDFC is supported at this time for payments. Token override will be enabled later.')
     process.exit(1)
   }
+
+  // PHASE: compute -> pack only, set outputs and exit
+  if (phase === 'compute') {
+    const stat = await fs.stat(targetPath)
+    const isDirectory = stat.isDirectory()
+    console.log(`Packing '${contentPath}' into CAR (UnixFS) ...`)
+    const { carPath, rootCid } = await createCarFromPath(targetPath, { isDirectory, logger })
+    await writeOutput('root_cid', rootCid.toString())
+    await writeOutput('car_path', carPath)
+    return
+  }
+
+  // PHASE: from-cache -> read cached metadata and set outputs + summary
+  if (phase === 'from-cache') {
+    const cacheDir = process.env.CACHE_DIR
+    const metaPath = join(cacheDir, 'upload.json')
+    const text = await fs.readFile(metaPath, 'utf8')
+    const meta = JSON.parse(text)
+
+    await writeOutput('root_cid', meta.rootCid)
+    await writeOutput('data_set_id', meta.dataSetId)
+    await writeOutput('piece_cid', meta.pieceCid)
+    await writeOutput('provider_id', meta.provider?.id || '')
+    await writeOutput('provider_name', meta.provider?.name || '')
+    await writeOutput('car_path', meta.carPath)
+    await writeOutput('metadata_path', metaPath)
+
+    // Ensure balances/allowances are still correct even when skipping upload
+    try {
+      const preparedCarPath = process.env.PREPARED_CAR_PATH || meta.carPath
+      const carBytes = await fs.readFile(preparedCarPath)
+
+      // Initialize Synapse and check allowances/deposits
+      const synapse = await initializeSynapse({ privateKey }, logger)
+      await checkAndSetAllowances(synapse)
+
+      // Top-up logic based on minDays/minBalance
+      let status = await getPaymentStatus(synapse)
+      let requiredTopUp = 0n
+      if (minDays > 0) {
+        const { topUp } = computeTopUpForDuration(status, minDays)
+        if (topUp > requiredTopUp) requiredTopUp = topUp
+      }
+      if (minBalance > 0n && status.depositedAmount < minBalance) {
+        const delta = minBalance - status.depositedAmount
+        if (delta > requiredTopUp) requiredTopUp = delta
+      }
+      if (requiredTopUp > 0n) {
+        if (maxTopUp != null && requiredTopUp > maxTopUp) {
+          throw new Error(
+            `Top-up required (${ethers.formatUnits(requiredTopUp, 18)} USDFC) exceeds maxTopUp (${ethers.formatUnits(maxTopUp, 18)} USDFC)`
+          )
+        }
+        console.log(`Depositing ${ethers.formatUnits(requiredTopUp, 18)} USDFC to maintain runway ...`)
+        await depositUSDFC(synapse, requiredTopUp)
+        status = await getPaymentStatus(synapse)
+      }
+
+      // Validate payment capacity for the (prepared) CAR size
+      await validatePaymentSetup(synapse, carBytes.length)
+    } catch (e) {
+      console.warn('Balance/allowance validation on cache path failed:', e?.message || e)
+    }
+
+    // Summary
+    try {
+      const summaryFile = process.env.GITHUB_STEP_SUMMARY
+      if (summaryFile) {
+        const md = [
+          '## Filecoin Pin Upload (cached)',
+          '',
+          `- Network: ${meta.network}`,
+          `- IPFS Root CID: \`${meta.rootCid}\``,
+          `- Data Set ID: ${meta.dataSetId}`,
+          `- Piece CID: ${meta.pieceCid}`,
+          `- Provider: ${meta.provider?.name || ''} (ID ${meta.provider?.id || ''})`,
+          `- Preview: ${meta.previewURL}`,
+          '',
+          `Artifacts:`,
+          `- CAR: ${meta.carPath}`,
+          `- Metadata: ${metaPath}`,
+          ''
+        ].join('\n')
+        await fs.appendFile(summaryFile, `\n${md}\n`)
+      }
+    } catch {}
+
+    return
+  }
+
+  // PHASE: upload (or default single-phase)
+  const preparedCarPath = process.env.PREPARED_CAR_PATH
+  const preparedRootCid = process.env.PREPARED_ROOT_CID
 
   // Initialize Synapse SDK (no storage context yet)
   const synapse = await initializeSynapse({ privateKey }, logger)
@@ -99,12 +193,17 @@ async function main() {
     status = await getPaymentStatus(synapse)
   }
 
-  // Determine if target path is a directory
-  const stat = await fs.stat(targetPath)
-  const isDirectory = stat.isDirectory()
-
-  console.log(`Packing '${contentPath}' into CAR (UnixFS) ...`)
-  const { carPath, rootCid } = await createCarFromPath(targetPath, { isDirectory, logger })
+  // Prepare CAR and root
+  let carPath = preparedCarPath
+  let rootCidStr = preparedRootCid
+  if (!carPath || !rootCidStr) {
+    const stat = await fs.stat(targetPath)
+    const isDirectory = stat.isDirectory()
+    console.log(`Packing '${contentPath}' into CAR (UnixFS) ...`)
+    const { carPath: cPath, rootCid } = await createCarFromPath(targetPath, { isDirectory, logger })
+    carPath = cPath
+    rootCidStr = rootCid.toString()
+  }
 
   // Read CAR data to upload
   const carBytes = await fs.readFile(carPath)
@@ -118,7 +217,7 @@ async function main() {
 
   // Upload to Synapse and associate IPFS Root CID
   const synapseService = { synapse, storage, providerInfo }
-  const { pieceCid, pieceId, dataSetId } = await uploadToSynapse(synapseService, carBytes, rootCid, logger, {
+  const { pieceCid, pieceId, dataSetId } = await uploadToSynapse(synapseService, carBytes, { toString: () => rootCidStr }, logger, {
     contextId: `gha-upload-${Date.now()}`,
   })
 
@@ -147,7 +246,7 @@ async function main() {
         network,
         contentPath: targetPath,
         carPath: artifactCarPath,
-        rootCid: rootCid.toString(),
+        rootCid: rootCidStr,
         pieceCid,
         pieceId,
         dataSetId,
@@ -159,8 +258,15 @@ async function main() {
     )
   )
 
+  // Also write metadata into the cache directory for future reuse
+  try {
+    const cacheDir = join(workspace, '.filecoin-pin-cache', rootCidStr)
+    await fs.mkdir(cacheDir, { recursive: true })
+    await fs.writeFile(join(cacheDir, 'upload.json'), await fs.readFile(metadataPath))
+  } catch {}
+
   // Set action outputs
-  await writeOutput('root_cid', rootCid.toString())
+  await writeOutput('root_cid', rootCidStr)
   await writeOutput('data_set_id', dataSetId)
   await writeOutput('piece_cid', pieceCid)
   await writeOutput('provider_id', providerId)
