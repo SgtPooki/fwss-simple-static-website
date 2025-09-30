@@ -1,0 +1,36 @@
+name: Upload site to Filecoin
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout site
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Build site
+        run: npm run build
+
+      - name: Upload to Filecoin
+        uses: ./.github/actions/filecoin-pin-upload-action
+        with:
+          privateKey: ${{ secrets.FILECOIN_WALLET_KEY }}
+          path: dist
+          minDays: 10
+          minBalance: "5"   # USDFC
+          maxTopUp: "5"     # USDFC

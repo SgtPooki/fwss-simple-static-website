@@ -1,0 +1,132 @@
+name: "Filecoin Pin Upload"
+description: "Pack site into a CAR, upload via filecoin-pin to Filecoin, and publish build artifacts."
+branding:
+  icon: upload-cloud
+  color: blue
+
+inputs:
+  github_token:
+    description: GitHub token for commenting and artifacts. Defaults to workflow token.
+    required: false
+    default: ${{ github.token }}
+  privateKey:
+    description: Required. Wallet private key used to fund uploads (USDFC on Calibration/Mainnet).
+    required: true
+  path:
+    description: Path to content to upload (file or directory). Typically your build output directory.
+    required: false
+    default: dist
+  minDays:
+    description: Minimum runway (days) to keep current spend alive. Number only.
+    required: false
+    default: "10"
+  minBalance:
+    description: Minimum deposit balance to maintain in Filecoin Pay (USDFC).
+    required: false
+  maxTopUp:
+    description: Maximum allowed additional deposit during this run (USDFC). Prevents accidental overspend.
+    required: false
+  token:
+    description: Payment token identifier. Currently only "USDFC" is supported; address override reserved for future.
+    required: false
+    default: "USDFC"
+  withCDN:
+    description: If true, request CDN in the storage context (depends on provider capabilities).
+    required: false
+    default: "false"
+
+outputs:
+  root_cid:
+    description: IPFS Root CID
+    value: ${{ steps.run.outputs.root_cid }}
+  data_set_id:
+    description: Synapse Data Set ID
+    value: ${{ steps.run.outputs.data_set_id }}
+  piece_cid:
+    description: Filecoin Piece CID
+    value: ${{ steps.run.outputs.piece_cid }}
+  provider_id:
+    description: Storage Provider ID
+    value: ${{ steps.run.outputs.provider_id }}
+  provider_name:
+    description: Storage Provider Name
+    value: ${{ steps.run.outputs.provider_name }}
+  car_path:
+    description: Path to the created CAR file
+    value: ${{ steps.run.outputs.car_path }}
+  metadata_path:
+    description: Path to JSON with upload metadata
+    value: ${{ steps.run.outputs.metadata_path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24.x'
+
+    - name: Install action deps
+      shell: bash
+      working-directory: .github/actions/filecoin-pin-upload-action
+      run: |
+        npm install --no-audit --no-fund
+
+    - name: Upload via filecoin-pin
+      id: run
+      shell: bash
+      working-directory: .github/actions/filecoin-pin-upload-action
+      env:
+        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+        INPUT_PRIVATEKEY: ${{ inputs.privateKey }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_MINDAYS: ${{ inputs.minDays }}
+        INPUT_MINBALANCE: ${{ inputs.minBalance }}
+        INPUT_MAXTOPUP: ${{ inputs.maxTopUp }}
+        INPUT_WITHCDN: ${{ inputs.withCDN }}
+        INPUT_TOKEN: ${{ inputs.token }}
+      run: |
+        node run.mjs
+
+    - name: Upload CAR + metadata artifacts
+      if: ${{ steps.run.outputs.car_path != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: filecoin-pin-upload
+        path: |
+          ${{ steps.run.outputs.car_path }}
+          ${{ steps.run.outputs.metadata_path }}
+
+    - name: Comment on PR with IPFS Root CID
+      if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+      uses: actions/github-script@v7
+      env:
+        IPFS_ROOT_CID: ${{ steps.run.outputs.root_cid }}
+        DATA_SET_ID: ${{ steps.run.outputs.data_set_id }}
+        PIECE_CID: ${{ steps.run.outputs.piece_cid }}
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const { IPFS_ROOT_CID, DATA_SET_ID, PIECE_CID } = process.env
+          const body = [
+            '<!-- filecoin-pin-upload-action -->',
+            'Filecoin Pin Upload ✅',
+            '',
+            `- IPFS Root CID: \\`${IPFS_ROOT_CID}\\``,
+            `- Data Set ID: \\`${DATA_SET_ID}\\``,
+            `- Piece CID: \\`${PIECE_CID}\\``,
+            '',
+            '- Preview (TBD infra): use a trustless gateway, e.g.:',
+            `  - https://ipfs.io/ipfs/${IPFS_ROOT_CID}`,
+          ].join('\n')
+
+          const { owner, repo } = context.repo
+          const issue_number = context.issue.number
+          const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number })
+          const existing = comments.find(c => c.user?.type === 'Bot' && (c.body || '').includes('filecoin-pin-upload-action'))
+          if (existing) {
+            await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+          } else {
+            await github.rest.issues.createComment({ owner, repo, issue_number, body })
+          }
+
