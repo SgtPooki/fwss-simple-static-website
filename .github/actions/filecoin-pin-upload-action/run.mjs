@@ -116,10 +116,7 @@ async function main() {
     previewURL
   }
 
-  const { artifactCarPath, metadataPath } = await createArtifacts(workspace, carPath, {
-    ...metadata,
-    carPath: artifactCarPath
-  })
+  const { artifactCarPath, metadataPath } = await createArtifacts(workspace, carPath, metadata)
 
   // Write metadata into the cache directory for future reuse
   const cacheDir = join(workspace, '.filecoin-pin-cache', rootCidStr)
