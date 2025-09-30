@@ -31,7 +31,8 @@ File: `.github/workflows/upload.yml`
   - Ensure payment setup (minDays/minBalance, optional maxTopUp)
   - Upload via Synapse (or reuse prior upload if content unchanged)
   - Upload artifacts: `filecoin-pin-artifacts/upload.car`, `upload.json`
-  - Comment on PRs with the IPFS Root CID
+- Comment on PRs with the IPFS Root CID
+- Ensure the workflow has `actions: read` permission if you want artifact reuse (cache fallback) to work.
 
 Caching behavior:
 - Content is keyed by IPFS Root CID. If unchanged, the action reuses prior results from cache or a previous artifact, still verifying balances and capacity.

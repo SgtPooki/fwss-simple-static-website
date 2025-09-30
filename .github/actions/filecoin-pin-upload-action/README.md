@@ -50,6 +50,7 @@ Caching details
 - Restrict allowed actions in repo/org settings (Actions → General → Allow select actions) to:
   - GitHub official (e.g., `actions/*`)
   - Your org (e.g., `filecoin-project/*`)
+- Grant the workflow/job `actions: read` if you want artifact reuse to work across runs.
 - Cap spend with `maxTopUp` (pushes) and a lower cap (or zero) on PRs.
 - Consider Environments with required reviewers for any deposit/top-up steps.
 - Keep workflow files protected with CODEOWNERS + branch protection.
