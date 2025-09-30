@@ -167,6 +167,7 @@ runs:
         INPUT_WITHCDN: ${{ inputs.withCDN }}
         INPUT_TOKEN: ${{ inputs.token }}
         INPUT_PROVIDERADDRESS: ${{ inputs.providerAddress }}
+        FROM_ARTIFACT: "true"
         ACTION_PHASE: from-cache
       run: |
         node run.mjs

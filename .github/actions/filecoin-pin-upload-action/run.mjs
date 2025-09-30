@@ -83,6 +83,7 @@ async function main() {
 
   // PHASE: from-cache -> read cached metadata and set outputs + summary
   if (phase === 'from-cache') {
+    const fromArtifact = String(process.env.FROM_ARTIFACT || '').toLowerCase() === 'true'
     const cacheDir = process.env.CACHE_DIR
     const metaPath = join(cacheDir, 'upload.json')
     const text = await fs.readFile(metaPath, 'utf8')
@@ -95,6 +96,10 @@ async function main() {
     await writeOutput('provider_name', meta.provider?.name || '')
     await writeOutput('car_path', meta.carPath)
     await writeOutput('metadata_path', metaPath)
+    await writeOutput('upload_status', fromArtifact ? 'reused-artifact' : 'reused-cache')
+
+    // Log reuse status for easy scanning
+    console.log(fromArtifact ? 'Reused previous artifact (no new upload)' : 'Reused cached metadata (no new upload)')
 
     // Ensure balances/allowances are still correct even when skipping upload
     try {
@@ -154,7 +159,7 @@ async function main() {
       const summaryFile = process.env.GITHUB_STEP_SUMMARY
       if (summaryFile) {
         const md = [
-          '## Filecoin Pin Upload (cached)',
+          fromArtifact ? '## Filecoin Pin Upload (reused artifact)' : '## Filecoin Pin Upload (cached)',
           '',
           `- Network: ${meta.network}`,
           `- IPFS Root CID: \`${meta.rootCid}\``,
@@ -162,6 +167,7 @@ async function main() {
           `- Piece CID: ${meta.pieceCid}`,
           `- Provider: ${meta.provider?.name || ''} (ID ${meta.provider?.id || ''})`,
           `- Preview: ${meta.previewURL}`,
+          `- Status: ${fromArtifact ? 'Reused artifact' : 'Reused cache'}`,
           '',
           `Artifacts:`,
           `- CAR: ${meta.carPath}`,
@@ -295,6 +301,7 @@ async function main() {
   await writeOutput('provider_name', providerName)
   await writeOutput('car_path', artifactCarPath)
   await writeOutput('metadata_path', metadataPath)
+  await writeOutput('upload_status', 'uploaded')
 
   console.log('\n━━━ Filecoin Pin Upload Complete ━━━')
   console.log(`Network: ${network}`)
@@ -303,6 +310,7 @@ async function main() {
   console.log(`Piece CID: ${pieceCid}`)
   console.log(`Provider: ${providerName} (ID ${providerId})`)
   console.log(`Preview: ${previewURL}`)
+  console.log('Status: New upload performed')
 
   // Append a concise summary to the GitHub Action run
   try {
@@ -317,6 +325,7 @@ async function main() {
         `- Piece CID: ${pieceCid}`,
         `- Provider: ${providerName} (ID ${providerId})`,
         `- Preview: ${previewURL}`,
+        `- Status: Uploaded`,
         '',
         `Artifacts:`,
         `- CAR: ${artifactCarPath}`,
