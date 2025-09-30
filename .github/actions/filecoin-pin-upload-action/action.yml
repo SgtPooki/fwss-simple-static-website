@@ -17,14 +17,14 @@ inputs:
     required: false
     default: dist
   minDays:
-    description: Minimum runway (days) to keep current spend alive. Number only.
+    description: Minimum runway (days) to keep current spend alive. Security note: on PRs, authors can change this.
     required: false
     default: "10"
   minBalance:
-    description: Minimum deposit balance to maintain in Filecoin Pay (USDFC).
+    description: Minimum deposit balance to maintain in Filecoin Pay (USDFC). Security note: on PRs, authors can change this.
     required: false
   maxTopUp:
-    description: Maximum allowed additional deposit during this run (USDFC). Prevents accidental overspend.
+    description: Maximum allowed additional deposit during this run (USDFC). Strongly recommended to cap PR spend.
     required: false
   token:
     description: Payment token identifier. Currently only "USDFC" is supported; address override reserved for future.

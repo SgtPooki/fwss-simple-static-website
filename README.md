@@ -53,3 +53,4 @@ Notes:
 - Token support is currently USDFC only.
 - The action summary shows whether it Uploaded, Reused cache, or Reused artifact, plus IDs and links. Artifacts include the CAR and metadata.
 - Secrets are not exposed to forked PRs; the job is skipped there.
+- Security: If you run uploads on PRs, PR authors can change inputs that influence deposits/top-ups. Set a conservative `maxTopUp`, protect workflow files, and require reviews.
