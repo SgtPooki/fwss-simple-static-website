@@ -8,7 +8,6 @@ inputs:
   github_token:
     description: GitHub token for commenting and artifacts. Defaults to workflow token.
     required: false
-    default: ${{ github.token }}
   privateKey:
     description: Required. Wallet private key used to fund uploads (USDFC on Calibration/Mainnet).
     required: true
@@ -129,7 +128,7 @@ runs:
       env:
         ROOT_CID: ${{ steps.compute.outputs.root_cid }}
       with:
-        github-token: ${{ inputs.github_token }}
+        github-token: ${{ inputs.github_token || github.token }}
         script: |
           const { owner, repo } = context.repo
           const ROOT_CID = process.env.ROOT_CID
@@ -218,7 +217,7 @@ runs:
         PIECE_CID: ${{ steps.run.outputs.piece_cid || steps.from-cache.outputs.piece_cid || steps.from-artifact.outputs.piece_cid }}
         UPLOAD_STATUS: ${{ steps.run.outputs.upload_status || steps.from-cache.outputs.upload_status || steps.from-artifact.outputs.upload_status }}
       with:
-        github-token: ${{ inputs.github_token }}
+        github-token: ${{ inputs.github_token || github.token }}
         script: |
           const { IPFS_ROOT_CID, DATA_SET_ID, PIECE_CID, UPLOAD_STATUS } = process.env
           const preview = 'https://ipfs.io/ipfs/' + IPFS_ROOT_CID
