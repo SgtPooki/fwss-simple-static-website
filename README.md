@@ -1,66 +1,55 @@
 # FWSS Simple Static Website
 
-Minimal Vite-powered static site to test the Filecoin Pin GitHub Action. The homepage renders a centered headline:
+Minimal Vite site used to test the Filecoin Pin GitHub Action. The page shows a centered headline:
 
   I am hosted on Filecoin
 
-This repo includes a workflow that builds the site and uploads it to Filecoin via filecoin-pin/Synapse.
+## Quick Start
 
-## Prerequisites
-
-- A wallet private key funded appropriately for Calibration/Mainnet with USDFC (for testing: Calibration + faucet).
-
-## Setup
-
-1) Install dependencies and run locally
+1) Install and run locally
 
 ```
 npm ci
 npm run dev
 ```
 
-2) Configure GitHub Secrets in this repo
+2) Add secret in this repo
 
-- `FILECOIN_WALLET_KEY`: the private key used by the action to fund uploads.
+- `FILECOIN_WALLET_KEY`: wallet private key with USDFC (Calibration/Mainnet).
 
-3) Push to main
+3) Push a change or run the workflow manually
 
-```
-git checkout -b main
-git commit -m "init"
-git push -u origin main
-```
+- Workflow triggers: push to `main`, pull requests to `main`, and manual dispatch.
 
-## What the workflow does
+## Workflow Overview
 
 File: `.github/workflows/upload.yml`
 
-- Checks out this site repo
-- Builds the site with Vite (output in `dist/`)
-- Runs the local action from `.github/actions/filecoin-pin-upload-action`, which:
-  - Packs the site into a UnixFS CAR
-  - Ensures payment setup (minDays/minBalance + optional maxTopUp)
-  - Uploads to Filecoin via Synapse
-  - Publishes artifacts (CAR + metadata)
-  - Comments on PRs with the IPFS Root CID (if running on PR events)
+- Builds the site (Vite → `dist/`)
+- Runs local action `.github/actions/filecoin-pin-upload-action` to:
+  - Pack `dist/` into a UnixFS CAR
+  - Ensure payment setup (minDays/minBalance, optional maxTopUp)
+  - Upload via Synapse (or reuse prior upload if content unchanged)
+  - Upload artifacts: `filecoin-pin-artifacts/upload.car`, `upload.json`
+  - Comment on PRs with the IPFS Root CID
 
-## Inputs used by the action
+Caching behavior:
+- Content is keyed by IPFS Root CID. If unchanged, the action reuses prior results from cache or a previous artifact, still verifying balances and capacity.
+
+## Action Inputs (common ones)
 
 ```
 with:
   privateKey: ${{ secrets.FILECOIN_WALLET_KEY }}
   path: dist
   minDays: 10
-  minBalance: "5"   # USDFC
-  maxTopUp: "50"     # USDFC
+  minBalance: "5"     # USDFC
+  maxTopUp: "50"      # USDFC
+  providerAddress: "0xa3971A7234a3379A1813d9867B531e7EeB20ae07"  # optional override
+  withCDN: "false"
 ```
 
 Notes:
-- The action currently supports USDFC only.
-- Preview link uses a trustless gateway (placeholder) until infra is ready; artifacts include CAR and metadata.
-
-## Troubleshooting
-
-- PAT access: ensure `ACTIONS_READ_TOKEN` has `repo` scope and can access `filecoin-project/filecoin-pin`.
-- Secrets from forks: if testing via PRs from forks, GitHub does not expose secrets by default; test on a branch push in this repo.
-- Node version: workflow uses Node 20 for build (Vite), and the action uses Node 24 internally when it runs its own setup. Both are compatible.
+- Token support is currently USDFC only.
+- The action summary shows whether it Uploaded, Reused cache, or Reused artifact, plus IDs and links. Artifacts include the CAR and metadata.
+- Secrets are not exposed to forked PRs; the job is skipped there.
