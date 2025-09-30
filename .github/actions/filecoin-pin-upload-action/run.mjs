@@ -133,6 +133,17 @@ async function main() {
       console.warn('Balance/allowance validation on cache path failed:', e?.message || e)
     }
 
+    // Mirror the restored metadata into the standard cache location so a subsequent
+    // actions/cache/save step can persist it keyed by Root CID.
+    try {
+      const workspace = process.env.GITHUB_WORKSPACE || process.cwd()
+      const stdCacheDir = join(workspace, '.filecoin-pin-cache', meta.rootCid)
+      await fs.mkdir(stdCacheDir, { recursive: true })
+      await fs.writeFile(join(stdCacheDir, 'upload.json'), text)
+    } catch (e) {
+      console.warn('Failed to mirror metadata into .filecoin-pin-cache:', e?.message || e)
+    }
+
     // Summary
     try {
       const summaryFile = process.env.GITHUB_STEP_SUMMARY

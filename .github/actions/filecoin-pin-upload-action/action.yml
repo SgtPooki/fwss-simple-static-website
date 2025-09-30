@@ -38,10 +38,6 @@ inputs:
     description: Optional override for storage provider address (on Calibration/Mainnet). Defaults to a known good provider on Calibration.
     required: false
     default: "0xa3971A7234a3379A1813d9867B531e7EeB20ae07"
-  cacheRetentionDays:
-    description: Retention (days) for GitHub Actions cache entries created for uploaded content.
-    required: false
-    default: "90"
 
 outputs:
   root_cid:
@@ -126,8 +122,57 @@ runs:
       run: |
         node run.mjs
 
-    - name: Upload via filecoin-pin
+    - name: Find previous artifact by Root CID
       if: ${{ steps.cache-restore.outputs.cache-hit != 'true' }}
+      id: find-artifact
+      uses: actions/github-script@v7
+      env:
+        ROOT_CID: ${{ steps.compute.outputs.root_cid }}
+      with:
+        github-token: ${{ inputs.github_token }}
+        script: |
+          const { owner, repo } = context.repo
+          const ROOT_CID = process.env.ROOT_CID
+          const targetName = `filecoin-pin-${ROOT_CID}`
+          const items = await github.paginate(github.rest.actions.listArtifactsForRepo, { owner, repo, per_page: 100 })
+          const found = items.find(a => a.name === targetName && !a.expired)
+          if (found) {
+            core.setOutput('artifact_id', String(found.id))
+            core.setOutput('run_id', String(found.workflow_run?.id || ''))
+          } else {
+            core.setOutput('artifact_id', '')
+            core.setOutput('run_id', '')
+          }
+
+    - name: Download previous artifact
+      if: ${{ steps.cache-restore.outputs.cache-hit != 'true' && steps.find-artifact.outputs.artifact_id != '' }}
+      uses: actions/download-artifact@v4
+      with:
+        name: filecoin-pin-${{ steps.compute.outputs.root_cid }}
+        run-id: ${{ steps.find-artifact.outputs.run_id }}
+        path: filecoin-pin-artifacts-restore
+
+    - name: Use artifact metadata
+      if: ${{ steps.cache-restore.outputs.cache-hit != 'true' && steps.find-artifact.outputs.artifact_id != '' }}
+      id: from-artifact
+      shell: bash
+      working-directory: .github/actions/filecoin-pin-upload-action
+      env:
+        CACHE_DIR: ${{ github.workspace }}/filecoin-pin-artifacts-restore
+        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+        INPUT_PRIVATEKEY: ${{ inputs.privateKey }}
+        INPUT_MINDAYS: ${{ inputs.minDays }}
+        INPUT_MINBALANCE: ${{ inputs.minBalance }}
+        INPUT_MAXTOPUP: ${{ inputs.maxTopUp }}
+        INPUT_WITHCDN: ${{ inputs.withCDN }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_PROVIDERADDRESS: ${{ inputs.providerAddress }}
+        ACTION_PHASE: from-cache
+      run: |
+        node run.mjs
+
+    - name: Upload via filecoin-pin
+      if: ${{ steps.cache-restore.outputs.cache-hit != 'true' && steps.find-artifact.outputs.artifact_id == '' }}
       id: run
       shell: bash
       working-directory: .github/actions/filecoin-pin-upload-action
@@ -153,24 +198,23 @@ runs:
       with:
         key: filecoin-pin-v1-${{ steps.compute.outputs.root_cid }}
         path: .filecoin-pin-cache/${{ steps.compute.outputs.root_cid }}
-        retention-days: ${{ inputs.cacheRetentionDays }}
 
     - name: Upload CAR + metadata artifacts
-      if: ${{ (steps.run.outputs.car_path || steps.from-cache.outputs.car_path) != '' }}
+      if: ${{ (steps.run.outputs.car_path || steps.from-cache.outputs.car_path || steps.from-artifact.outputs.car_path) != '' }}
       uses: actions/upload-artifact@v4
       with:
-        name: filecoin-pin-upload
+        name: filecoin-pin-${{ steps.run.outputs.root_cid || steps.from-cache.outputs.root_cid || steps.from-artifact.outputs.root_cid || steps.compute.outputs.root_cid }}
         path: |
-          ${{ steps.run.outputs.car_path || steps.from-cache.outputs.car_path }}
-          ${{ steps.run.outputs.metadata_path || steps.from-cache.outputs.metadata_path }}
+          ${{ steps.run.outputs.car_path || steps.from-cache.outputs.car_path || steps.from-artifact.outputs.car_path }}
+          ${{ steps.run.outputs.metadata_path || steps.from-cache.outputs.metadata_path || steps.from-artifact.outputs.metadata_path }}
 
     - name: Comment on PR with IPFS Root CID
       if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
       uses: actions/github-script@v7
       env:
-        IPFS_ROOT_CID: ${{ steps.run.outputs.root_cid || steps.from-cache.outputs.root_cid }}
-        DATA_SET_ID: ${{ steps.run.outputs.data_set_id || steps.from-cache.outputs.data_set_id }}
-        PIECE_CID: ${{ steps.run.outputs.piece_cid || steps.from-cache.outputs.piece_cid }}
+        IPFS_ROOT_CID: ${{ steps.run.outputs.root_cid || steps.from-cache.outputs.root_cid || steps.from-artifact.outputs.root_cid }}
+        DATA_SET_ID: ${{ steps.run.outputs.data_set_id || steps.from-cache.outputs.data_set_id || steps.from-artifact.outputs.data_set_id }}
+        PIECE_CID: ${{ steps.run.outputs.piece_cid || steps.from-cache.outputs.piece_cid || steps.from-artifact.outputs.piece_cid }}
       with:
         github-token: ${{ inputs.github_token }}
         script: |

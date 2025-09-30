@@ -13,7 +13,6 @@ with:
   minBalance: "5"   # USDFC
   maxTopUp: "50"     # USDFC
   providerAddress: "0xa3971A7234a3379A1813d9867B531e7EeB20ae07"
-  cacheRetentionDays: "90"
 ```
 
 Notes:
@@ -29,9 +28,8 @@ Inputs
 - `token` (default: `USDFC`): Supported token.
 - `withCDN` (default: `false`): Request CDN if available.
 - `providerAddress` (default shown above): Override storage provider address (Calibration/Mainnet). Leave empty to allow auto-selection.
-- `cacheRetentionDays` (default: `90`): Retention for the GitHub Actions cache entries keyed by IPFS Root CID.
 
 Caching details
 - Cache key: `filecoin-pin-v1-${root_cid}` ensures uploads are skipped for identical content.
 - You can invalidate all caches by changing the version prefix (e.g., `v2`).
-- Retention is configurable via `cacheRetentionDays`; each restore extends the last-access time.
+- Retention is managed by GitHub Actions and organization settings; it’s not configurable per cache entry in actions/cache v4. Each restore updates last-access time.
