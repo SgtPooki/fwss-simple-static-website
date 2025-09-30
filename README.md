@@ -1,0 +1,1 @@
+# fwss-simple-static-website
