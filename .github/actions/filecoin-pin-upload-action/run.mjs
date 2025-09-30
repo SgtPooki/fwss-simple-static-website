@@ -131,6 +131,11 @@ async function main() {
       await validatePaymentSetup(synapse, carBytes.length)
     } catch (e) {
       console.warn('Balance/allowance validation on cache path failed:', e?.message || e)
+    } finally {
+      // IMPORTANT: Always cleanup providers so the Node process can exit
+      try {
+        await cleanupSynapseService()
+      } catch {}
     }
 
     // Mirror the restored metadata into the standard cache location so a subsequent
