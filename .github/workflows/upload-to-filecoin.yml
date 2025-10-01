@@ -1,0 +1,38 @@
+name: Upload to Filecoin
+
+# Runs AFTER build-pr.yml completes - HAS SECRETS
+on:
+  workflow_run:
+    workflows: ["Build PR Content"]  # Must match the name in build-for-filecoin.yml
+    types:
+      - completed
+  workflow_dispatch:  # Allow manual testing
+    inputs:
+      artifact_name:
+        description: 'Artifact name (e.g., filecoin-build-pr-1)'
+        required: false
+        type: string
+      build_run_id:
+        description: 'Build workflow run ID (find it in the build workflow URL)'
+        required: false
+        type: string
+
+jobs:
+  upload:
+    # Only run if the build workflow succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      # Upload to Filecoin using UPLOAD mode
+      # The action automatically finds artifacts, downloads metadata, modifies Filecoin Onchain Cloud deposit, and handles commenting
+      - name: Upload to Filecoin
+        uses: sgtpooki/filecoin-upload-action@main  # Replace with actual version
+        with:
+          mode: upload
+          artifact_name: ${{ inputs.artifact_name }} # Allow manual override for testing
+          build_run_id: ${{ inputs.build_run_id }}   # Build workflow run ID for manual testing
+          walletPrivateKey: ${{ secrets.WALLET_PRIVATE_KEY }}
+          minDays: "30"  # Ensure 30 days of funding; Hardcoded - not from PR!
+          maxTopUp: "0.10" # 10 cents, or 0.10 USDFC; Hardcoded limit - not from PR!
+          github_token: ${{ secrets.GITHUB_TOKEN }}
