@@ -4,6 +4,9 @@ name: Build PR Content
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  # If you want to build PRs from forks, you need to use pull_request_target
+  pull_request_target:
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]  # Also run when PRs are merged to main
   workflow_dispatch:  # Allow manual build to kick off upload flow
