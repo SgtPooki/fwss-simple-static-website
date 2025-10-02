@@ -2,7 +2,8 @@ name: Build PR Content
 
 # Runs on PRs from forks and same-repo - NO SECRETS
 on:
-  pull_request:
+  # Use pull_request_target for both same-repo and fork PRs
+  pull_request_target:
     types: [opened, synchronize, reopened]
   push:
     branches: [main]  # Also run when PRs are merged to main
