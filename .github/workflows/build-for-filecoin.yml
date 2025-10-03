@@ -26,6 +26,16 @@ jobs:
       - name: Build website
         run: npm run build
 
+      # Debug: Show what we're about to upload
+      - name: Debug - Show dist contents before upload
+        run: |
+          echo "=== DEBUG: dist folder contents ==="
+          ls -la dist/
+          echo "=== DEBUG: dist folder size ==="
+          du -sh dist/
+          echo "=== DEBUG: Individual file sizes ==="
+          find dist/ -type f -exec ls -lh {} \; | head -20
+
       # Upload build artifacts to GitHub Actions artifacts
       # The upload workflow will download these artifacts and use them
       - name: Upload build artifacts

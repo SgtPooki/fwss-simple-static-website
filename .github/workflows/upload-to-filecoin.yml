@@ -32,6 +32,20 @@ jobs:
           repository: ${{ github.event.workflow_run.repository.full_name }}
           run-id: ${{ github.event.workflow_run.id }}
 
+      # Debug: Show what we downloaded
+      - name: Debug - Show downloaded dist contents
+        run: |
+          echo "=== DEBUG: Downloaded dist folder contents ==="
+          ls -la dist/
+          echo "=== DEBUG: Downloaded dist folder size ==="
+          du -sh dist/
+          echo "=== DEBUG: Individual file sizes in downloaded dist ==="
+          find dist/ -type f -exec ls -lh {} \; | head -20
+          echo "=== DEBUG: Working directory ==="
+          pwd
+          echo "=== DEBUG: Environment variables ==="
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+
       # Upload to Filecoin using the downloaded build artifacts
       # The action will create a CAR file from the downloaded artifacts and upload to Filecoin
       - name: Upload to Filecoin
