@@ -35,6 +35,8 @@ jobs:
           du -sh dist/
           echo "=== DEBUG: Individual file sizes ==="
           find dist/ -type f -exec ls -lh {} \; | head -20
+          echo "=== DEBUG: Total file count ==="
+          find dist/ -type f | wc -l
 
       # Upload build artifacts to GitHub Actions artifacts
       # The upload workflow will download these artifacts and use them
