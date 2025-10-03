@@ -19,17 +19,18 @@ jobs:
           # Use PR head SHA if triggered by pull_request, otherwise use default (push event)
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      # Your build steps here (example)
-      - name: Build
-        run: |
-          npm install
-          npm run build
+      # Build the website
+      - name: Install dependencies
+        run: npm install
 
-      # Use the action in BUILD mode (default, no secrets needed)
-      # The action automatically saves PR metadata and generates artifact names
-      - name: Build CAR file
-        id: build
-        uses: sgtpooki/filecoin-upload-action@main  # Replace with actual version
+      - name: Build website
+        run: npm run build
+
+      # Upload build artifacts to GitHub Actions artifacts
+      # The upload workflow will download these artifacts and use them
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
         with:
-          # mode: build is the default, but can be specified explicitly
+          name: build-artifacts-pr-${{ github.event.pull_request.number || github.run_number }}
           path: dist
+          retention-days: 1
